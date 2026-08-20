@@ -1,0 +1,118 @@
+name: MLOps CI/CD
+
+on:
+  pull_request:
+    branches: [main]
+
+  push:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+
+  # ---------------------------
+  # Job 1: Run Unit Tests
+  # ---------------------------
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          cd "Lab 5"
+          pip install -r requirements.txt
+
+      - name: Run Unit Tests
+        run: |
+          cd "Lab 5"
+          pytest tests/ -v
+
+  # ---------------------------
+  # Job 2: Train & Evaluate
+  # ---------------------------
+  train_and_evaluate:
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          cd "Lab 5"
+          pip install -r requirements.txt
+
+      - name: Prepare Data
+        run: |
+          cd "Lab 5"
+          python src/prepare.py
+
+      - name: Train Model
+        run: |
+          cd "Lab 5"
+          python src/train.py
+
+      - name: Evaluate Model
+        run: |
+          cd "Lab 5"
+          python src/evaluate.py
+
+      - name: Upload Model Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-and-metrics
+          path: |
+            Lab 5/model/
+            Lab 5/metrics.json
+
+  # ---------------------------
+  # Job 3: Deploy to Hugging Face
+  # ---------------------------
+  deploy_to_huggingface:
+    needs: train_and_evaluate
+
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          cd "Lab 5"
+          pip install -r requirements.txt
+
+      - name: Prepare, Train and Evaluate
+        run: |
+          cd "Lab 5"
+          python src/prepare.py
+          python src/train.py
+          python src/evaluate.py
+
+      - name: Push Model to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_REPO_ID: ${{ vars.HF_REPO_ID }}
+        run: |
+          cd "Lab 5"
+          python src/register.py
